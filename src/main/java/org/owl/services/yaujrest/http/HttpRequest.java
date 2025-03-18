@@ -5,6 +5,14 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Объект-значение представляющий HTTP-запрос
+ * @param method метод запроса
+ * @param uri URI ресурса
+ * @param version версия HTTP-протокола используемого в запроса
+ * @param headers HTTP-заголовки запроса
+ * @param body тело запроса
+ */
 public record HttpRequest(Method method, URI uri, Version version, Map<String, String> headers, byte[] body) {
 
     @Override

@@ -4,6 +4,14 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Объект значение представляющий HTTP-ответ
+ * @param version версия HTTP-протокола
+ * @param statusCode код ответа
+ * @param reason пояснительная фраза ответа
+ * @param headers HTTP-заголовки ответа
+ * @param body тело ответа
+ */
 public record HttpResponse(Version version, int statusCode, String reason, Map<String, String> headers, byte[] body) {
 
     @Override
