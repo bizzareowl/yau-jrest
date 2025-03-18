@@ -1,7 +1,9 @@
-package org.owl.services.yaujrest.http.request;
+package org.owl.services.yaujrest.http.parser;
 
+import org.owl.services.yaujrest.http.HttpResponse;
 import org.owl.services.yaujrest.http.Method;
 import org.owl.services.yaujrest.http.Version;
+import org.owl.services.yaujrest.http.HttpRequest;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -12,8 +14,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
 
-public final class HttpRequestParser {
-
+public final class HttpMessageParser {
 
     private static final class Lexer {
 
@@ -32,7 +33,7 @@ public final class HttpRequestParser {
             try {
                 this.buffer = this.inputStream.readNBytes(BUFFER_SIZE);
             } catch (IOException ioe) {
-                throw new HttpRequestParseException("Unable to parse HTTP request");
+                throw new HttpMessageParseException("Unable to parse HTTP request");
             }
         }
 
@@ -41,7 +42,7 @@ public final class HttpRequestParser {
                 try {
                     next();
                 } catch (IOException ioe) {
-                    throw new HttpRequestParseException("Unable to parse HTTP request");
+                    throw new HttpMessageParseException("Unable to parse HTTP request");
                 }
             }
 
@@ -72,12 +73,56 @@ public final class HttpRequestParser {
         }
     }
 
-    public HttpRequest parse(final InputStream inputStream) throws HttpRequestParseException {
+    public HttpResponse parseHttpResponse(final InputStream inputStream) throws HttpMessageParseException {
         final Lexer lexer = new Lexer(inputStream);
-        return parse(lexer);
+        return parseHttpResponse(lexer);
     }
 
-    private HttpRequest parse(final Lexer lexer) {
+    private HttpResponse parseHttpResponse(final Lexer lexer) {
+        final Version version = parseVersion(lexer);
+        match(lexer, ' ');
+
+        final int statusCode = parseStatusCode(lexer);
+        match(lexer, ' ');
+
+        final String reason = parseReason(lexer);
+        matchCRLF(lexer);
+
+        final Map<String, String> headers = parseHeaders(lexer);
+        matchCRLF(lexer);
+
+        final byte[] body = parseBody(lexer);
+
+        return new HttpResponse(version, statusCode, reason, headers, body);
+    }
+
+    private int parseStatusCode(final Lexer lexer) {
+        final StringBuilder stringBuilder = new StringBuilder();
+        for (int i = 0; i < 3; i++) {
+            stringBuilder.append((char) lexer.fetch());
+            try {
+                lexer.next();
+            } catch (IOException ioe) {
+                throw new HttpMessageParseException("Error while parsing status code");
+            }
+        }
+        return Integer.parseInt(stringBuilder.toString());
+    }
+
+    private String parseReason(final Lexer lexer) {
+        if ((char) lexer.fetch() == '\r') {
+            return null;
+        }
+
+        return parseValue(lexer, ch -> isVChar(ch) || isOBSText(ch) || ch == '\t' || ch == ' ');
+    }
+
+    public HttpRequest parseHttpRequest(final InputStream inputStream) throws HttpMessageParseException {
+        final Lexer lexer = new Lexer(inputStream);
+        return parseHttpRequest(lexer);
+    }
+
+    private HttpRequest parseHttpRequest(final Lexer lexer) {
         final Method method = parseMethod(lexer);
         match(lexer, ' ');
 
@@ -107,12 +152,12 @@ public final class HttpRequestParser {
             try {
                 lexer.next();
             } catch (IOException ioe) {
-                throw new HttpRequestParseException("Error while parsing value");
+                throw new HttpMessageParseException("Error while parsing value");
             }
         }
 
         if (stringBuilder.isEmpty()) {
-            throw new HttpRequestParseException("Expected value or token");
+            throw new HttpMessageParseException("Expected value or token");
         }
 
         return stringBuilder.toString();
@@ -126,7 +171,7 @@ public final class HttpRequestParser {
         final String httpWord = parseValue(lexer, this::isTChar);
 
         if (!httpWord.equals("HTTP")) {
-            throw new HttpRequestParseException("Unexpected token while parsing HTTP version");
+            throw new HttpMessageParseException("Unexpected token while parsing HTTP version");
         }
 
         try {
@@ -139,7 +184,7 @@ public final class HttpRequestParser {
 
             return new Version(major, minor);
         } catch (IOException ioe) {
-            throw new HttpRequestParseException("Error while matching character");
+            throw new HttpMessageParseException("Error while matching character");
         }
     }
 
@@ -179,7 +224,7 @@ public final class HttpRequestParser {
             try {
                 lexer.next();
             } catch (IOException ioe) {
-                throw new HttpRequestParseException("Error while parsing request body");
+                throw new HttpMessageParseException("Error while parsing request body");
             }
         }
 
@@ -197,13 +242,13 @@ public final class HttpRequestParser {
 
     private void match(final Lexer lexer, final char ch) {
         if ((char) lexer.fetch() != ch) {
-            throw new HttpRequestParseException("Unexpected character occurred while parsing HTTP message: " + ch);
+            throw new HttpMessageParseException("Unexpected character occurred while parsing HTTP message: " + ch);
         }
 
         try {
             lexer.next();
         } catch (IOException ioe) {
-            throw new HttpRequestParseException("Error while matching character");
+            throw new HttpMessageParseException("Error while matching character");
         }
     }
 
@@ -217,7 +262,7 @@ public final class HttpRequestParser {
             try {
                 lexer.next();
             } catch (IOException ioe) {
-                throw new HttpRequestParseException("Error while matching optional whitespaces");
+                throw new HttpMessageParseException("Error while matching optional whitespaces");
             }
         }
     }

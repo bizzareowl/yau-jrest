@@ -1,7 +1,5 @@
-package org.owl.services.yaujrest.http.request;
+package org.owl.services.yaujrest.http;
 
-import org.owl.services.yaujrest.http.Method;
-import org.owl.services.yaujrest.http.Version;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.Map;
