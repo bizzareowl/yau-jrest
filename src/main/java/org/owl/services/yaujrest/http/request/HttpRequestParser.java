@@ -1,137 +1,239 @@
 package org.owl.services.yaujrest.http.request;
 
-import org.owl.services.yaujrest.http.Version;
 import org.owl.services.yaujrest.http.Method;
-import java.io.BufferedReader;
+import org.owl.services.yaujrest.http.Version;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Predicate;
 
 public final class HttpRequestParser {
 
-    private static final int MARK_READ_LIMIT = 1024;
 
-    public HttpRequest parse(final InputStream requestInputStream) {
-        try (final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(requestInputStream))) {
-            final Method method = parseMethod(bufferedReader);
-            final URI uri = parseURI(bufferedReader);
-            final Version version = parseVersion(bufferedReader);
-            skipCRLF(bufferedReader);
+    private static final class Lexer {
 
-            final Map<String, String> headers = isNotCRLF(bufferedReader) ? parseHeaders(bufferedReader) : null;
-            skipCRLF(bufferedReader);
+        private static final int BUFFER_SIZE = 1024;
 
-            final int[] body = parseBody(bufferedReader);
+        private final InputStream inputStream;
 
-            return new HttpRequest(method, uri, version, headers, body);
-        } catch (IOException | URISyntaxException ioe) {
-            throw new HttpRequestParseException("Error while parsing HTTP request", ioe);
+        private byte[] buffer;
+
+        private int currentPosition;
+
+        private boolean eof;
+
+        private Lexer(final InputStream inputStream) {
+            this.inputStream = inputStream;
+            try {
+                this.buffer = this.inputStream.readNBytes(BUFFER_SIZE);
+            } catch (IOException ioe) {
+                throw new HttpRequestParseException("Unable to parse HTTP request");
+            }
+        }
+
+        public byte fetch() {
+            if (this.currentPosition >= this.buffer.length) {
+                try {
+                    next();
+                } catch (IOException ioe) {
+                    throw new HttpRequestParseException("Unable to parse HTTP request");
+                }
+            }
+
+            if (this.eof) {
+                return -1;
+            }
+
+            return this.buffer[this.currentPosition];
+        }
+
+        public void next() throws IOException {
+            if (Objects.isNull(this.buffer) || this.currentPosition >= this.buffer.length) {
+                try {
+                    this.buffer = this.inputStream.readNBytes(BUFFER_SIZE);
+                    this.currentPosition = 0;
+
+                    if (this.buffer.length == 0) {
+                        this.eof = true;
+                        this.inputStream.close();
+                    }
+                } catch (IOException ioe) {
+                    this.inputStream.close();
+                    throw ioe;
+                }
+            } else {
+                this.currentPosition++;
+            }
         }
     }
 
-    private Method parseMethod(final Reader reader) throws IOException {
-        skipWhitespaces(reader);
-        return Method.valueOf(readNextString(reader));
+    public HttpRequest parse(final InputStream inputStream) throws HttpRequestParseException {
+        final Lexer lexer = new Lexer(inputStream);
+        return parse(lexer);
     }
 
-    private URI parseURI(final Reader reader) throws IOException, URISyntaxException {
-        skipWhitespaces(reader);
-        return new URI(readNextString(reader));
+    private HttpRequest parse(final Lexer lexer) {
+        final Method method = parseMethod(lexer);
+        match(lexer, ' ');
+
+        final URI uri = parseUri(lexer);
+        match(lexer, ' ');
+
+        final Version version = parseVersion(lexer);
+        matchCRLF(lexer);
+
+        final Map<String, String> headers = parseHeaders(lexer);
+        matchCRLF(lexer);
+
+        final byte[] body = parseBody(lexer);
+
+        return new HttpRequest(method, uri, version, headers, body);
     }
 
-    private Version parseVersion(final Reader reader) throws IOException {
-        skipWhitespaces(reader);
-        return readNextString(reader).equals("HTTP/1.1") ? Version.HTTP_1_1 : Version.UNSUPPORTED;
+    private Method parseMethod(final Lexer lexer) {
+        final String value = parseValue(lexer, this::isTChar);
+        return Method.valueOf(value);
     }
 
-    private Map<String, String> parseHeaders(final Reader reader) throws IOException {
-        skipWhitespaces(reader);
-        final Map<String, String> headers = new HashMap<>();
-        while (isNotCRLF(reader)) {
-            final Map.Entry<String, String> header = parseHeader(reader);
-            headers.put(header.getKey(), header.getValue());
-            skipCRLF(reader);
-        }
-        return headers;
-    }
-
-    private Map.Entry<String, String> parseHeader(final Reader reader) throws IOException {
-        skipWhitespaces(reader);
-        final String key = readNextString(reader);
-        final int currentChar = reader.read();
-
-        if ((char) currentChar != ':') {
-            throw new HttpRequestParseException("Colon (:) expected");
-        }
-
-        skipWhitespaces(reader);
-        final String value = readNextString(reader);
-        return Map.entry(key, value);
-    }
-
-    private int[] parseBody(final Reader reader) throws IOException {
-        final List<Integer> body = new ArrayList<>();
-        int currentChar = reader.read();
-        while (currentChar != -1) {
-            body.add(currentChar);
-            currentChar = reader.read();
-        }
-
-        return !body.isEmpty() ? body.stream().mapToInt(i -> i).toArray() : null;
-    }
-
-    private void skipWhitespaces(final Reader reader) throws IOException {
-        reader.mark(MARK_READ_LIMIT);
-        int currentChar = reader.read();
-
-        if (!Character.isWhitespace((char) currentChar)) {
-            reader.reset();
-            return;
-        }
-
-        while (Character.isWhitespace((char) currentChar)) {
-            reader.mark(MARK_READ_LIMIT);
-            currentChar = reader.read();
-        }
-        reader.reset();
-    }
-
-    private String readNextString(final Reader reader) throws IOException {
+    private String parseValue(final Lexer lexer, final Predicate<Character> predicate) {
         final StringBuilder stringBuilder = new StringBuilder();
-        int currentChar = reader.read();
-        while (isIdentifierCharacter((char) currentChar)) {
-            stringBuilder.append((char) currentChar);
-            reader.mark(MARK_READ_LIMIT);
-            currentChar = reader.read();
+        while (predicate.test((char) lexer.fetch())) {
+            stringBuilder.append((char) lexer.fetch());
+            try {
+                lexer.next();
+            } catch (IOException ioe) {
+                throw new HttpRequestParseException("Error while parsing value");
+            }
         }
-        reader.reset();
+
+        if (stringBuilder.isEmpty()) {
+            throw new HttpRequestParseException("Expected value or token");
+        }
+
         return stringBuilder.toString();
     }
 
-    private void skipCRLF(final Reader reader) throws IOException {
-        final int firstChar = reader.read(), secondChar = reader.read();
-        if (!((char) firstChar == '\r' && (char) secondChar == '\n')) {
-            throw new HttpRequestParseException("CRLF expected");
+    private URI parseUri(final Lexer lexer) {
+        return URI.create(parseValue(lexer, ch -> !Character.isWhitespace(ch)));
+    }
+
+    private Version parseVersion(final Lexer lexer) {
+        final String httpWord = parseValue(lexer, this::isTChar);
+
+        if (!httpWord.equals("HTTP")) {
+            throw new HttpRequestParseException("Unexpected token while parsing HTTP version");
+        }
+
+        try {
+            match(lexer, '/');
+            final int major = Integer.parseInt(String.valueOf((char) lexer.fetch()));
+            lexer.next();
+            match(lexer, '.');
+            final int minor = Integer.parseInt(String.valueOf((char) lexer.fetch()));
+            lexer.next();
+
+            return new Version(major, minor);
+        } catch (IOException ioe) {
+            throw new HttpRequestParseException("Error while matching character");
         }
     }
 
-    private boolean isNotCRLF(final Reader reader) throws IOException {
-        reader.mark(MARK_READ_LIMIT);
-        final int firstChar = reader.read(), secondChar = reader.read();
-        final boolean result = firstChar == '\r' && secondChar == '\n';
-        reader.reset();
-        return !result;
+    private Map<String, String> parseHeaders(final Lexer lexer) {
+        if ((char) lexer.fetch() == '\r') {
+            return null;
+        }
+
+        final Map<String, String> result = new HashMap<>();
+        while ((char) lexer.fetch() != '\r') {
+            final Map.Entry<String, String> header = parseHeader(lexer);
+            result.put(header.getKey(), header.getValue());
+        }
+
+        return result;
     }
 
-    private boolean isIdentifierCharacter(final char ch) {
-        return !Character.isWhitespace(ch) && ch != ':';
+    private Map.Entry<String, String> parseHeader(final Lexer lexer) {
+        final String fieldName = parseValue(lexer, this::isTChar);
+        match(lexer, ':');
+        matchOWS(lexer);
+        final String fieldValue = parseFieldValue(lexer);
+        matchOWS(lexer);
+        matchCRLF(lexer);
+
+        return Map.entry(fieldName, fieldValue);
+    }
+
+    private String parseFieldValue(final Lexer lexer) {
+        return parseValue(lexer, ch -> isVChar(ch) || isOBSText(ch) || ch == '\t' || ch == ' ');
+    }
+
+    private byte[] parseBody(final Lexer lexer) {
+        final List<Byte> body = new ArrayList<>();
+        while (lexer.fetch() != -1) {
+            body.add(lexer.fetch());
+            try {
+                lexer.next();
+            } catch (IOException ioe) {
+                throw new HttpRequestParseException("Error while parsing request body");
+            }
+        }
+
+        if (body.isEmpty()) {
+            return null;
+        }
+
+        final byte[] bytes = new byte[body.size()];
+        for (int i = 0; i < bytes.length; i++) {
+            bytes[i] = body.get(i);
+        }
+
+        return bytes;
+    }
+
+    private void match(final Lexer lexer, final char ch) {
+        if ((char) lexer.fetch() != ch) {
+            throw new HttpRequestParseException("Unexpected character occurred while parsing HTTP message: " + ch);
+        }
+
+        try {
+            lexer.next();
+        } catch (IOException ioe) {
+            throw new HttpRequestParseException("Error while matching character");
+        }
+    }
+
+    private void matchCRLF(final Lexer lexer) {
+        match(lexer, '\r');
+        match(lexer, '\n');
+    }
+
+    private void matchOWS(final Lexer lexer) {
+        while ((char) lexer.fetch() == ' ' || (char) lexer.fetch() == '\t') {
+            try {
+                lexer.next();
+            } catch (IOException ioe) {
+                throw new HttpRequestParseException("Error while matching optional whitespaces");
+            }
+        }
+    }
+
+    private boolean isTChar(final char ch) {
+        return Character.isLetter(ch) || Character.isDigit(ch) || ch == '!' || ch == '#' || ch == '$' || ch == '%'
+                || ch == '&' || ch == '\'' || ch == '*' || ch == '+' || ch == '-' || ch == '.' || ch == '^' || ch == '_'
+                || ch == '`' || ch == '|' || ch =='~';
+    }
+
+    private boolean isVChar(final char ch) {
+        return ch >= 0x21 && ch <= 0x7E;
+    }
+
+    private boolean isOBSText(final char ch) {
+        return ch >= 0x80 && ch <= 0xFF;
     }
 
 }

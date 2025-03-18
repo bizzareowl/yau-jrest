@@ -1,6 +1,3 @@
 package org.owl.services.yaujrest.http;
 
-public enum Version {
-    HTTP_1_1,
-    UNSUPPORTED
-}
+public record Version(int major, int minor) { }

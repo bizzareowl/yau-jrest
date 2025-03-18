@@ -2,11 +2,10 @@ package org.owl.services.yaujrest.http.request;
 
 import org.junit.jupiter.api.Test;
 import org.owl.services.yaujrest.http.Method;
-import org.owl.services.yaujrest.http.Version;
 import java.io.ByteArrayInputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -22,11 +21,10 @@ public class HttpRequestParserTest {
 
         final HttpRequest httpRequest = new HttpRequestParser().parse(new ByteArrayInputStream(httpRequestString.getBytes()));
 
-        assertEquals(Method.GET, httpRequest.getMethod());
-        assertEquals(URI.create("/path/to/resource?param1=1&param2=2"), httpRequest.getUri());
-        assertEquals(Version.HTTP_1_1, httpRequest.getVersion());
-        assertEquals(Map.of("Host", "localhost"), httpRequest.getHeaders());
-        assertNull(httpRequest.getBody());
+        assertEquals(Method.GET, httpRequest.method());
+        assertEquals(URI.create("/path/to/resource?param1=1&param2=2"), httpRequest.uri());
+        assertEquals(Map.of("Host", "localhost"), httpRequest.headers());
+        assertNull(httpRequest.body());
 
     }
 
@@ -43,11 +41,10 @@ public class HttpRequestParserTest {
 
         final HttpRequest httpRequest = new HttpRequestParser().parse(new ByteArrayInputStream(httpRequestString.getBytes()));
 
-        assertEquals(Method.POST, httpRequest.getMethod());
-        assertEquals(URI.create("/path/to/resource?param1=1&param2=2"), httpRequest.getUri());
-        assertEquals(Version.HTTP_1_1, httpRequest.getVersion());
-        assertEquals(Map.of("Host", "www.example.com"), httpRequest.getHeaders());
-        assertArrayEquals("{\n    \"param3\": 3,\n    \"param4\": 4\n}".chars().toArray(), httpRequest.getBody());
+        assertEquals(Method.POST, httpRequest.method());
+        assertEquals(URI.create("/path/to/resource?param1=1&param2=2"), httpRequest.uri());
+        assertEquals(Map.of("Host", "www.example.com"), httpRequest.headers());
+        assertEquals("{\n    \"param3\": 3,\n    \"param4\": 4\n}", new String(httpRequest.body(), StandardCharsets.UTF_8));
 
     }
 

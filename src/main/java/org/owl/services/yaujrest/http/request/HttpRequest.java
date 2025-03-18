@@ -7,58 +7,12 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 
-public class HttpRequest {
-
-    private final Method method;
-
-    private final URI uri;
-
-    private final Version version;
-
-    private final Map<String, String> headers;
-
-    private final int[] body;
-
-    public HttpRequest(Method method, URI uri, Version version) {
-        this(method, uri, version, null, null);
-    }
-
-    public HttpRequest(Method method, URI uri, Version version, Map<String, String> headers) {
-        this(method, uri, version, headers, null);
-    }
-
-    public HttpRequest(Method method, URI uri, Version version, Map<String, String> headers, int[] body) {
-        this.method = method;
-        this.uri = uri;
-        this.version = version;
-        this.headers = headers;
-        this.body = body;
-    }
-
-    public Method getMethod() {
-        return this.method;
-    }
-
-    public URI getUri() {
-        return this.uri;
-    }
-
-    public Version getVersion() {
-        return this.version;
-    }
-
-    public Map<String, String> getHeaders() {
-        return this.headers;
-    }
-
-    public int[] getBody() {
-        return this.body;
-    }
+public record HttpRequest(Method method, URI uri, Version version, Map<String, String> headers, byte[] body) {
 
     @Override
     public boolean equals(Object o) {
-        if (!(o instanceof HttpRequest that)) return false;
-        return method == that.method && Objects.equals(uri, that.uri) && version == that.version && Objects.equals(headers, that.headers) && Objects.deepEquals(body, that.body);
+        if (!(o instanceof HttpRequest(Method methodOther, URI uriOther, Version versionOther, Map<String, String> headersOther, byte[] bodyOther))) return false;
+        return method == methodOther && Objects.equals(uri, uriOther) && Objects.equals(version, versionOther) && Objects.equals(headers, headersOther) && Objects.deepEquals(body, bodyOther);
     }
 
     @Override
@@ -68,16 +22,12 @@ public class HttpRequest {
 
     @Override
     public String toString() {
-        return this.method.toString() +
-                " " + this.uri + " " + "HTTP/1.1" + "\r\n" +
-                this.headers.entrySet().stream().sorted().map(entry -> entry.getKey() + ": " + entry.getValue()).reduce((left, right) -> left + "\r\n" + right).orElse("") + "\r\n" +
-                bodyToString();
+        return "HttpRequest{" +
+                "method=" + method +
+                ", uri=" + uri +
+                ", version=" + version +
+                ", headers=" + headers +
+                ", body=" + Arrays.toString(body) +
+                '}';
     }
-
-    private String bodyToString() {
-        final StringBuilder stringBuilder = new StringBuilder();
-        Arrays.stream(this.body).forEach(i -> stringBuilder.append((char) i));
-        return stringBuilder.toString();
-    }
-
 }
