@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Predicate;
 
 /**
@@ -41,7 +40,9 @@ public final class HttpMessageParser {
         /**
          * Буффер входных байтов
          */
-        private byte[] buffer;
+        private final byte[] buffer = new byte[BUFFER_SIZE];
+
+        private int bufferSize;
 
         /**
          * Текущая позиция в буфере входных байтов
@@ -62,7 +63,10 @@ public final class HttpMessageParser {
         private Lexer(final InputStream inputStream) {
             this.inputStream = inputStream;
             try {
-                this.buffer = this.inputStream.readNBytes(BUFFER_SIZE);
+                this.bufferSize = this.inputStream.read(this.buffer);
+                if (this.bufferSize == -1) {
+                    this.eof = true;
+                }
             } catch (IOException ioe) {
                 throw new HttpMessageParseException("Unable to parse HTTP request");
             }
@@ -73,7 +77,7 @@ public final class HttpMessageParser {
          * @return текущий байт в буфере
          */
         public byte fetch() {
-            if (this.currentPosition >= this.buffer.length) {
+            if (this.currentPosition >= this.bufferSize) {
                 try {
                     next();
                 } catch (IOException ioe) {
@@ -97,18 +101,25 @@ public final class HttpMessageParser {
          * очередной порции байтов из входного потока HTTP-сообщения
          */
         public void next() throws IOException {
-            if (Objects.isNull(this.buffer) || this.currentPosition >= this.buffer.length) {
-                try {
-                    this.buffer = this.inputStream.readNBytes(BUFFER_SIZE);
-                    this.currentPosition = 0;
+            if (this.currentPosition >= this.bufferSize) {
 
-                    if (this.buffer.length == 0) {
-                        this.eof = true;
-                        this.inputStream.close();
-                    }
-                } catch (IOException ioe) {
-                    this.inputStream.close();
-                    throw ioe;
+                if (this.inputStream.available() == 0) {
+                    this.currentPosition = -1;
+                    this.bufferSize = 0;
+                    this.eof = true;
+                    return;
+                }
+
+                this.bufferSize = 0;
+                int b;
+                while ((b = this.inputStream.read()) != -1) {
+                    this.buffer[this.bufferSize++] = (byte) (b & 0xFF);
+                }
+
+                this.currentPosition = 0;
+
+                if (this.bufferSize == 0) {
+                    this.eof = true;
                 }
             } else {
                 this.currentPosition++;
