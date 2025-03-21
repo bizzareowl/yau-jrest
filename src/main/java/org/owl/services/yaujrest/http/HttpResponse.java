@@ -30,7 +30,11 @@ public record HttpResponse(Version version, int statusCode, String reason, Map<S
         if (Objects.nonNull(this.headers)) {
             headers.forEach((key, value) -> stringBuilder.append(key).append(": ").append(value).append("\r\n"));
         }
-        stringBuilder.append("\r\n").append(new String(body, StandardCharsets.US_ASCII));
+
+        stringBuilder.append("\r\n");
+        if (Objects.nonNull(this.body)) {
+            stringBuilder.append(new String(body, StandardCharsets.US_ASCII));
+        }
 
         return stringBuilder.toString().getBytes(StandardCharsets.US_ASCII);
     }
