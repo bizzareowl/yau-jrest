@@ -2,10 +2,36 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>org.owl.services</groupId>
+  <groupId>io.github.bizzareowl</groupId>
   <artifactId>yau-jrest</artifactId>
   <version>0.1.0</version>
   <packaging>jar</packaging>
+
+  <name>${artifactId}</name>
+  <description>Yet another useless Java REST client</description>
+  <url>https://github.com/bizzareowl/yau-jrest</url>
+
+  <developers>
+    <developer>
+      <name>bizzareowl</name>
+      <email>yummypotatopie@yandex.ru</email>
+      <organization>bizzareowl</organization>
+      <organizationUrl>https://github.com/bizzareowl</organizationUrl>
+    </developer>
+  </developers>
+
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>http://www.opensource.org/licenses/mit-license.php</url>
+    </license>
+  </licenses>
+
+  <scm>
+    <connection>scm:git:git://github.com/bizzareowl/yau-jrest.git</connection>
+    <developerConnection>scm:git:ssh://github.com:bizzareowl/yau-jrest.git</developerConnection>
+    <url>https://github.com/bizzareowl/yau-jrest/tree/master</url>
+  </scm>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -29,18 +55,62 @@
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-simple</artifactId>
       <version>2.0.17</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 
   <build>
     <plugins>
       <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.7.0</version>
+        <extensions>true</extensions>
+        <configuration>
+          <publishingServerId>central</publishingServerId>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <version>2.2.1</version>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <phase>package</phase>
+            <goals>
+              <goal>jar-no-fork</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
-        <version>3.6.2</version>
-        <configuration>
-          <source>${maven.compiler.source}</source>
-        </configuration>
+        <version>2.9.1</version>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <phase>package</phase>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <version>3.2.7</version>
+        <executions>
+          <execution>
+            <id>sign-artifacts</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>sign</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
